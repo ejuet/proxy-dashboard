@@ -18,11 +18,11 @@ export function AdminBar({
     const [password, setPassword] = useState("");
     const [showPw, setShowPw] = useState(false);
 
+    // Load once. Do NOT call onCredsChanged here (avoids update loops).
     useEffect(() => {
         const c = loadCreds();
         setCreds(c);
-        onCredsChanged(c);
-    }, [onCredsChanged]);
+    }, []);
 
     function login() {
         const c = { username: username.trim(), password };
