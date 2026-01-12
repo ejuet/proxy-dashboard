@@ -5,13 +5,12 @@ set -euo pipefail
 APP_NAME="myapp"
 APP_USER="${SUDO_USER:-$USER}"                  # user to run services as
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"    # project root
-BACKEND_PORT="8000"                             # only used for description/log sanity
-FRONTEND_PORT="3000"                            # static server port
+FRONTEND_PORT="3000"
 # -----------------------------
 
 echo "[1/6] Installing OS packages..."
-apt-get update -y
-apt-get install -y npm python3-venv
+sudo apt-get update -y
+sudo apt-get install -y python3-venv nodejs npm
 
 echo "[2/6] Creating Python venv + installing backend deps..."
 cd "$PROJECT_DIR"
@@ -22,20 +21,16 @@ pip install --upgrade pip
 pip install -r backend/requirements.txt
 deactivate
 
-echo "[3/6] Installing frontend deps + building..."
+echo "[3/6] Installing frontend deps + building (Next.js)..."
 cd "$PROJECT_DIR/frontend"
 npm install
 npm run build
 
-echo "[4/6] Installing frontend static server (serve)..."
-# Use a global install so systemd can call it reliably
-npm install -g serve
-
-echo "[5/6] Writing systemd unit files..."
+echo "[4/6] Writing systemd unit files..."
 BACKEND_UNIT_PATH="/etc/systemd/system/${APP_NAME}-backend.service"
 FRONTEND_UNIT_PATH="/etc/systemd/system/${APP_NAME}-frontend.service"
 
-tee "$BACKEND_UNIT_PATH" >/dev/null <<EOF
+sudo tee "$BACKEND_UNIT_PATH" >/dev/null <<EOF
 [Unit]
 Description=${APP_NAME} Backend (python backend/server.py)
 After=network.target
@@ -48,7 +43,6 @@ Environment=PATH=${PROJECT_DIR}/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbi
 ExecStart=${PROJECT_DIR}/venv/bin/python ${PROJECT_DIR}/backend/server.py
 Restart=always
 RestartSec=2
-# Optional hardening:
 NoNewPrivileges=true
 PrivateTmp=true
 
@@ -56,19 +50,22 @@ PrivateTmp=true
 WantedBy=multi-user.target
 EOF
 
-tee "$FRONTEND_UNIT_PATH" >/dev/null <<EOF
+# Next.js should be served with "next start" (via "npm run start"),
+# NOT with a static server pointed at build/.
+sudo tee "$FRONTEND_UNIT_PATH" >/dev/null <<EOF
 [Unit]
-Description=${APP_NAME} Frontend (serve React build)
+Description=${APP_NAME} Frontend (Next.js - npm run start)
 After=network.target
 
 [Service]
 Type=simple
 User=${APP_USER}
 WorkingDirectory=${PROJECT_DIR}/frontend
-ExecStart=/usr/bin/env serve -s ${PROJECT_DIR}/frontend/build -l ${FRONTEND_PORT}
+Environment=NODE_ENV=production
+Environment=PORT=${FRONTEND_PORT}
+ExecStart=/usr/bin/npm run start
 Restart=always
 RestartSec=2
-# Optional hardening:
 NoNewPrivileges=true
 PrivateTmp=true
 
@@ -76,18 +73,19 @@ PrivateTmp=true
 WantedBy=multi-user.target
 EOF
 
-echo "[6/6] Enabling + starting services..."
-systemctl daemon-reload
-systemctl enable --now "${APP_NAME}-backend.service"
-systemctl enable --now "${APP_NAME}-frontend.service"
+echo "[5/6] Enabling + starting services..."
+sudo systemctl daemon-reload
+sudo systemctl enable --now "${APP_NAME}-backend.service"
+sudo systemctl enable --now "${APP_NAME}-frontend.service"
 
+echo "[6/6] Status / logs helpers"
 echo
-echo "Done."
-echo "Backend service:  ${APP_NAME}-backend.service  (expected port: ${BACKEND_PORT} if your app uses it)"
-echo "Frontend service: ${APP_NAME}-frontend.service (serving build/ on port ${FRONTEND_PORT})"
+echo "Frontend expected at: http://<host>:${FRONTEND_PORT}"
 echo
-echo "Useful commands:"
-echo "  systemctl status ${APP_NAME}-backend.service"
-echo "  systemctl status ${APP_NAME}-frontend.service"
-echo "  journalctl -u ${APP_NAME}-backend.service -f"
-echo "  journalctl -u ${APP_NAME}-frontend.service -f"
+echo "Check status:"
+echo "  sudo systemctl status ${APP_NAME}-backend.service"
+echo "  sudo systemctl status ${APP_NAME}-frontend.service"
+echo
+echo "Follow logs:"
+echo "  sudo journalctl -u ${APP_NAME}-backend.service -f"
+echo "  sudo journalctl -u ${APP_NAME}-frontend.service -f"
