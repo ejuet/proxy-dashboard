@@ -112,21 +112,8 @@ export default function HomePage() {
           <div className="relative flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
               <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
-                Services
+                Dashboard
               </h1>
-
-              <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
-                {source && (
-                  <span className="rounded-full bg-white/5 border border-white/10 px-3 py-1">
-                    source: <span className="text-zinc-200">{source}</span>
-                    {source === "cache" && cacheAt ? (
-                      <span className="ml-2 text-zinc-400">
-                        (fetched: {cacheAt})
-                      </span>
-                    ) : null}
-                  </span>
-                )}
-              </div>
             </div>
 
             <div className="flex items-center gap-2">

@@ -49,16 +49,11 @@ export function LinkCard({
                             )}
                         </div>
 
-                        {desc ? (
+                        {
                             <p className="mt-1 line-clamp-2 text-sm text-zinc-300/90">
-                                {desc}
+                                {desc || <br />}
                             </p>
-                        ) : (
-                            <p className="mt-1 line-clamp-2 text-sm text-zinc-400/70">
-                                {link.domain_names?.join(", ") || "No domains"}
-                            </p>
-                        )}
-
+                        }
                         <div className="mt-4 flex items-center justify-between gap-3">
                             <div className="min-w-0">
                                 <p className="truncate text-xs text-zinc-400">
