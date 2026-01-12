@@ -95,10 +95,6 @@ export default function HomePage() {
               <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
                 Services
               </h1>
-              <p className="mt-2 text-sm text-zinc-300/90 max-w-2xl">
-                A friendly dashboard over Nginx Proxy Manager. Names and descriptions
-                are editable (admin), but the links stay true to NPM.
-              </p>
 
               <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
                 {source && (
@@ -115,13 +111,8 @@ export default function HomePage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <button className="btn" onClick={load} disabled={loading}>
-                <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-                Refresh
-              </button>
               <Link className="btn" href="/admin">
                 <Settings2 className="h-4 w-4 mr-2" />
-                Admin tools
               </Link>
             </div>
           </div>
