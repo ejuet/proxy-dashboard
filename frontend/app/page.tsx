@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AdminCreds } from "@/lib/auth";
+import Link from "next/link";
+import { RefreshCw, Settings2 } from "lucide-react";
+
+import { AdminCreds, loadCreds } from "@/lib/auth";
 import { getLinks, LinkOut, patchLinkMeta, deleteLinkMeta } from "@/lib/api";
 import { LinkCard } from "@/components/LinkCard";
-import { AdminBar } from "@/components/AdminBar";
 import { EditLinkDialog } from "@/components/EditLinkDialogue";
-import { RefreshCw, Settings2 } from "lucide-react";
-import Link from "next/link";
 
 export default function HomePage() {
   const [links, setLinks] = useState<LinkOut[]>([]);
@@ -23,24 +23,25 @@ export default function HomePage() {
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<LinkOut | null>(null);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if(!q) return links;
-    return links.filter((l) => {
-      const hay = [
-        l.name,
-        l.description,
-        l.emoji,
-        ...(l.domain_names || []),
-        l.forward_host,
-        String(l.forward_port ?? ""),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(q);
-    });
-  }, [links, query]);
+  // Load creds from sessionStorage on mount, and also when returning from /admin
+  useEffect(() => {
+    const refreshCreds = () => setAdminCreds(loadCreds());
+
+    refreshCreds();
+
+    const onFocus = () => refreshCreds();
+    window.addEventListener("focus", onFocus);
+
+    const onVis = () => {
+      if(document.visibilityState === "visible") refreshCreds();
+    };
+    document.addEventListener("visibilitychange", onVis);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -67,6 +68,25 @@ export default function HomePage() {
     load();
   }, [load]);
 
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if(!q) return links;
+    return links.filter((l) => {
+      const hay = [
+        l.name,
+        l.description,
+        l.emoji,
+        ...(l.domain_names || []),
+        l.forward_host,
+        String(l.forward_port ?? ""),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [links, query]);
+
   async function saveEdit(patch: any) {
     if(!editing || !adminCreds) throw new Error("Not admin");
     const updated = await patchLinkMeta(editing.id, patch, adminCreds);
@@ -76,14 +96,13 @@ export default function HomePage() {
   async function deleteMeta() {
     if(!editing || !adminCreds) throw new Error("Not admin");
     await deleteLinkMeta(editing.id, adminCreds);
-    // easiest: reload to get default merge from backend
-    await load();
+    await load(); // reload so defaults show again
   }
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
-      {/* Hero */}
       <div className="flex flex-col gap-6">
+        {/* Hero */}
         <div className="rounded-3xl glass soft-ring p-7 overflow-hidden relative">
           <div className="absolute inset-0 opacity-60 pointer-events-none">
             <div className="absolute -top-40 -right-40 h-96 w-96 rounded-full bg-indigo-500/20 blur-3xl" />
@@ -130,11 +149,28 @@ export default function HomePage() {
             />
           </div>
 
-          <AdminBar
-            includeHidden={includeHidden}
-            setIncludeHidden={setIncludeHidden}
-            onCredsChanged={(c) => setAdminCreds(c)}
-          />
+          {/* Admin status (NO LOGIN FIELDS) */}
+          <div className="rounded-2xl glass soft-ring p-4 flex flex-col gap-3">
+            {
+              adminCreds &&
+              <>
+
+                <div className="text-xs text-zinc-400">
+                  {`Signed in as ${adminCreds.username}`}
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={includeHidden}
+                    onChange={(e) => setIncludeHidden(e.target.checked)}
+                    disabled={!adminCreds}
+                    className="h-4 w-4 rounded border-white/20 bg-white/10 disabled:opacity-50"
+                  />
+                  Include hidden
+                </label>
+              </>
+            }
+          </div>
         </div>
 
         {/* Status */}
