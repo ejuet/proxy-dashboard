@@ -10,8 +10,8 @@ FRONTEND_PORT="3000"                            # static server port
 # -----------------------------
 
 echo "[1/6] Installing OS packages..."
-sudo apt-get update -y
-sudo apt-get install -y npm python3-venv
+apt-get update -y
+apt-get install -y npm python3-venv
 
 echo "[2/6] Creating Python venv + installing backend deps..."
 cd "$PROJECT_DIR"
@@ -29,13 +29,13 @@ npm run build
 
 echo "[4/6] Installing frontend static server (serve)..."
 # Use a global install so systemd can call it reliably
-sudo npm install -g serve
+npm install -g serve
 
 echo "[5/6] Writing systemd unit files..."
 BACKEND_UNIT_PATH="/etc/systemd/system/${APP_NAME}-backend.service"
 FRONTEND_UNIT_PATH="/etc/systemd/system/${APP_NAME}-frontend.service"
 
-sudo tee "$BACKEND_UNIT_PATH" >/dev/null <<EOF
+tee "$BACKEND_UNIT_PATH" >/dev/null <<EOF
 [Unit]
 Description=${APP_NAME} Backend (python backend/server.py)
 After=network.target
@@ -56,7 +56,7 @@ PrivateTmp=true
 WantedBy=multi-user.target
 EOF
 
-sudo tee "$FRONTEND_UNIT_PATH" >/dev/null <<EOF
+tee "$FRONTEND_UNIT_PATH" >/dev/null <<EOF
 [Unit]
 Description=${APP_NAME} Frontend (serve React build)
 After=network.target
@@ -77,9 +77,9 @@ WantedBy=multi-user.target
 EOF
 
 echo "[6/6] Enabling + starting services..."
-sudo systemctl daemon-reload
-sudo systemctl enable --now "${APP_NAME}-backend.service"
-sudo systemctl enable --now "${APP_NAME}-frontend.service"
+systemctl daemon-reload
+systemctl enable --now "${APP_NAME}-backend.service"
+systemctl enable --now "${APP_NAME}-frontend.service"
 
 echo
 echo "Done."
@@ -87,7 +87,7 @@ echo "Backend service:  ${APP_NAME}-backend.service  (expected port: ${BACKEND_P
 echo "Frontend service: ${APP_NAME}-frontend.service (serving build/ on port ${FRONTEND_PORT})"
 echo
 echo "Useful commands:"
-echo "  sudo systemctl status ${APP_NAME}-backend.service"
-echo "  sudo systemctl status ${APP_NAME}-frontend.service"
-echo "  sudo journalctl -u ${APP_NAME}-backend.service -f"
-echo "  sudo journalctl -u ${APP_NAME}-frontend.service -f"
+echo "  systemctl status ${APP_NAME}-backend.service"
+echo "  systemctl status ${APP_NAME}-frontend.service"
+echo "  journalctl -u ${APP_NAME}-backend.service -f"
+echo "  journalctl -u ${APP_NAME}-frontend.service -f"
