@@ -2,3 +2,4 @@ backend/npm_token.json
 backend/npm_proxy_cache.json
 __pycache__/
 backend/dashboard_links_meta.json
+backend/dashboard_links_cache.json

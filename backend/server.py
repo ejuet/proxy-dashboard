@@ -11,6 +11,15 @@ Features
 - GET  /config (admin)         -> view runtime config (incl. NPM base URL)
 - PATCH /config (admin)        -> update runtime config (incl. NPM base URL)
 
+Caching behavior (NEW)
+- On successful /links live fetch, cache raw NPM proxy-hosts to DASH_LINKS_CACHE_FILE (default ./dashboard_links_cache.json)
+- If token missing/expired OR NPM is unreachable, /links falls back to cached hosts (if present)
+- When serving cached links, /links sets headers:
+    X-Links-Source: cache
+    X-Links-Cache-Fetched-At: <iso8601 UTC timestamp>
+  Otherwise:
+    X-Links-Source: live
+
 Admin protection
 - Editing/config routes require HTTP Basic auth (ADMIN_USER / ADMIN_PASS env vars).
 """
@@ -20,6 +29,7 @@ from __future__ import annotations
 import json
 import os
 import secrets
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -48,6 +58,11 @@ CONFIG_FILE = Path(
     os.environ.get("DASH_CONFIG_FILE", "./dashboard_config.json")
 ).expanduser()
 
+# NEW: cache for proxy-host links
+LINKS_CACHE_FILE = Path(
+    os.environ.get("DASH_LINKS_CACHE_FILE", "./dashboard_links_cache.json")
+).expanduser()
+
 ADMIN_USER = os.environ.get("ADMIN_USER", "")
 ADMIN_PASS = os.environ.get("ADMIN_PASS", "")
 
@@ -55,7 +70,7 @@ CORS_ORIGINS = [
     o.strip() for o in os.environ.get("DASH_CORS_ORIGINS", "").split(",") if o.strip()
 ]
 
-app = FastAPI(title="Dashboard Backend", version="1.1.0")
+app = FastAPI(title="Dashboard Backend", version="1.2.0")
 
 # Two security modes:
 # - security: required (auto_error=True) -> for admin-only routes
@@ -259,6 +274,46 @@ async def get_valid_token_or_401() -> str:
 
 
 # ----------------------------
+# Links cache (NEW)
+# ----------------------------
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def load_links_cache() -> tuple[Optional[list[dict]], Optional[str]]:
+    """
+    Returns (hosts, fetched_at_iso).
+    hosts is the raw list from NPM /api/nginx/proxy-hosts.
+    """
+    data = _read_json_file(LINKS_CACHE_FILE)
+    if not isinstance(data, dict):
+        return None, None
+
+    hosts = data.get("hosts")
+    fetched_at = data.get("fetched_at")
+
+    if not isinstance(hosts, list):
+        return None, None
+    if fetched_at is not None and not isinstance(fetched_at, str):
+        fetched_at = None
+
+    hosts = [h for h in hosts if isinstance(h, dict)]
+    return hosts, fetched_at
+
+
+def save_links_cache(hosts: list[dict]) -> None:
+    _atomic_write_json(
+        LINKS_CACHE_FILE,
+        {
+            "fetched_at": _utc_now_iso(),
+            "hosts": hosts,
+        },
+    )
+
+
+# ----------------------------
 # Dashboard metadata store
 # ----------------------------
 
@@ -386,15 +441,20 @@ async def renew_token(req: RenewTokenRequest) -> RenewTokenResponse:
 async def get_links(
     include_hidden: bool = False,
     creds: Optional[HTTPBasicCredentials] = Depends(security_optional),
+    response: Response = None,
 ) -> list[LinkOut]:
     """
     Fetch current proxy-hosts from NPM and merge with dashboard metadata.
 
     - Non-logged-in users: only non-hidden links
     - Admin: can request hidden links using ?include_hidden=true (requires HTTP Basic auth)
+
+    Caching behavior:
+    - On successful live fetch, cache the NPM hosts to disk.
+    - If token is missing/expired OR NPM fetch fails, serve cached hosts if available.
+    - When serving cache, response includes headers indicating cached source.
     """
     if include_hidden and not is_admin(creds):
-        # Keep error explicit: hidden links require admin credentials
         _admin_configured_or_503()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -402,26 +462,43 @@ async def get_links(
             headers={"WWW-Authenticate": "Basic"},
         )
 
-    token = await get_valid_token_or_401()
-    r = await npm_request("GET", "/api/nginx/proxy-hosts", token=token)
+    hosts: Optional[list[dict]] = None
+    source = "live"
+    cache_fetched_at: Optional[str] = None
 
-    if r.status_code == 401:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="NPM token expired/invalid. Call POST /auth/token/renew.",
-        )
-    if r.is_error:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"NPM error fetching proxy-hosts (HTTP {r.status_code}).",
-        )
+    # Try live fetch if we have a token that validates
+    token = load_token()
+    if token:
+        token_ok = await validate_token(token)
+        if token_ok:
+            try:
+                r = await npm_request("GET", "/api/nginx/proxy-hosts", token=token)
 
-    hosts = r.json()
-    if not isinstance(hosts, list):
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Unexpected NPM response shape for proxy-hosts.",
-        )
+                # Token might expire between validate and request
+                if r.status_code == 401:
+                    hosts = None
+                elif r.is_error:
+                    hosts = None
+                else:
+                    data = r.json()
+                    if isinstance(data, list):
+                        hosts = [h for h in data if isinstance(h, dict)]
+                        save_links_cache(hosts)
+                    else:
+                        hosts = None
+            except httpx.HTTPError:
+                hosts = None
+
+    # Fallback to cache if live not available
+    if hosts is None:
+        cached_hosts, cache_fetched_at = load_links_cache()
+        if cached_hosts is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="No valid NPM token and no cached links available. Call POST /auth/token/renew.",
+            )
+        hosts = cached_hosts
+        source = "cache"
 
     meta = load_meta()
     merged = merge_hosts_with_meta(hosts, meta)
@@ -429,8 +506,14 @@ async def get_links(
     if not include_hidden:
         merged = [x for x in merged if not x.hidden]
 
-    # stable ordering: by first domain name
     merged.sort(key=lambda x: (x.domain_names[0] if x.domain_names else ""))
+
+    # Tell the user whether cache was used
+    if response is not None:
+        response.headers["X-Links-Source"] = source
+        if source == "cache" and cache_fetched_at:
+            response.headers["X-Links-Cache-Fetched-At"] = cache_fetched_at
+
     return merged
 
 
