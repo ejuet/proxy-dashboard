@@ -9,8 +9,8 @@ FRONTEND_PORT="3000"
 # -----------------------------
 
 echo "[1/6] Installing OS packages..."
-sudo apt-get update -y
-sudo apt-get install -y python3-venv nodejs npm
+apt-get update -y
+apt-get install -y python3-venv nodejs npm
 
 echo "[2/6] Creating Python venv + installing backend deps..."
 cd "$PROJECT_DIR"
@@ -30,7 +30,7 @@ echo "[4/6] Writing systemd unit files..."
 BACKEND_UNIT_PATH="/etc/systemd/system/${APP_NAME}-backend.service"
 FRONTEND_UNIT_PATH="/etc/systemd/system/${APP_NAME}-frontend.service"
 
-sudo tee "$BACKEND_UNIT_PATH" >/dev/null <<EOF
+tee "$BACKEND_UNIT_PATH" >/dev/null <<EOF
 [Unit]
 Description=${APP_NAME} Backend (python backend/server.py)
 After=network.target
@@ -52,7 +52,7 @@ EOF
 
 # Next.js should be served with "next start" (via "npm run start"),
 # NOT with a static server pointed at build/.
-sudo tee "$FRONTEND_UNIT_PATH" >/dev/null <<EOF
+tee "$FRONTEND_UNIT_PATH" >/dev/null <<EOF
 [Unit]
 Description=${APP_NAME} Frontend (Next.js - npm run start)
 After=network.target
@@ -74,18 +74,18 @@ WantedBy=multi-user.target
 EOF
 
 echo "[5/6] Enabling + starting services..."
-sudo systemctl daemon-reload
-sudo systemctl enable --now "${APP_NAME}-backend.service"
-sudo systemctl enable --now "${APP_NAME}-frontend.service"
+systemctl daemon-reload
+systemctl enable --now "${APP_NAME}-backend.service"
+systemctl enable --now "${APP_NAME}-frontend.service"
 
 echo "[6/6] Status / logs helpers"
 echo
 echo "Frontend expected at: http://<host>:${FRONTEND_PORT}"
 echo
 echo "Check status:"
-echo "  sudo systemctl status ${APP_NAME}-backend.service"
-echo "  sudo systemctl status ${APP_NAME}-frontend.service"
+echo "  systemctl status ${APP_NAME}-backend.service"
+echo "  systemctl status ${APP_NAME}-frontend.service"
 echo
 echo "Follow logs:"
-echo "  sudo journalctl -u ${APP_NAME}-backend.service -f"
-echo "  sudo journalctl -u ${APP_NAME}-frontend.service -f"
+echo "  journalctl -u ${APP_NAME}-backend.service -f"
+echo "  journalctl -u ${APP_NAME}-frontend.service -f"
