@@ -1,4 +1,4 @@
-npm_token.json
-npm_proxy_cache.json
+backend/npm_token.json
+backend/npm_proxy_cache.json
 __pycache__/
-dashboard_links_meta.json
+backend/dashboard_links_meta.json
