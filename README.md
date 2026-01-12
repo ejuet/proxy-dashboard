@@ -6,5 +6,5 @@ export ADMIN_USER="admin"
 export ADMIN_PASS="change-me"
 
 # Optional
-export DASH_CORS_ORIGINS="http://localhost:5173,http://localhost:3000"
+export DASH_CORS_ORIGINS="http://localhost:5173,http://localhost:3000,https://localhost:3000,https://localhost:5173"
 ```
