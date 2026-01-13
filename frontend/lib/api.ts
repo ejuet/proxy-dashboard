@@ -24,7 +24,7 @@ export type ConfigPatch = { npm_base_url: string };
 export type RenewTokenReq = { identity: string; secret: string };
 export type RenewTokenRes = { token: string };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE
 
 function mustBase(): string {
     if(!API_BASE) {
