@@ -6,6 +6,6 @@ export function bestLinkUrl(domainNames: string[]): string | null {
     // If it already looks like a URL
     if(d.startsWith("http://") || d.startsWith("https://")) return d;
 
-    // Best effort: default to https
-    return `https://${d}`;
+    // Best effort: default to http
+    return `http://${d}`;
 }
