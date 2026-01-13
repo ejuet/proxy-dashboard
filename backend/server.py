@@ -70,7 +70,7 @@ CORS_ORIGINS = [
     o.strip()
     for o in os.environ.get(
         "DASH_CORS_ORIGINS",
-        "http://localhost:5173,http://localhost:3000,https://localhost:3000,https://localhost:5173",
+        "*",
     ).split(",")
     if o.strip()
 ]
